@@ -1,0 +1,96 @@
+version: "3.7"
+
+services:
+  db:
+    build:
+      context: .
+      dockerfile: docker/mysql/Dockerfile
+    container_name: ${APP_ID}_db
+    volumes:
+      - ./run/mysql:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    ports:
+      - ${MYSQL_PORT}:3306
+    networks:
+      backend:
+        aliases:
+          - ${APP_ID}_db
+  app:
+    build:
+      context: .
+      dockerfile: docker/apache/Dockerfile
+      args:
+        uid: ${UID}
+    container_name: ${APP_ID}_app
+    env_file: .env
+    environment:
+      - APACHE_RUN_USER=#${UID}
+      - APACHE_RUN_GROUP=#${UID}
+    domainname: ${APP_ID}.test
+    # init: true
+    volumes:
+      - .:/var/www/html
+      - ./docker/apache/php.ini:/usr/local/etc/php/conf.d/php.ini
+      - /etc/hosts:/host/etc/hosts # for linux based host
+      # - /private/etc/hosts:/host/etc/hosts # for macOS based host
+    working_dir: /var/www/html/
+    ports:
+      - ${PORT_HTTP}:80
+    networks:
+      backend:
+        aliases:
+          - ${APP_ID}_app
+          - www.${APP_ID}.test # define alias on docker network
+    depends_on:
+      - db
+    links:
+      - db
+    # Run php artisan commands inside container, comment again after running
+    # command: bash -c 'php artisan db:seed'
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: ${APP_ID}_pma
+    ports:
+      - ${PHPMYADMIN_PORT}:80
+    environment:
+      PMA_HOST: db
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    networks:
+      backend:
+        aliases:
+          - ${APP_ID}_app
+    depends_on:
+      - db
+
+  redis:
+    image: redis:alpine
+    container_name: ${APP_ID}_redis
+    command: redis-server --appendonly yes --requirepass "${REDIS_PASSWORD}"
+    volumes:
+      - ./run/redis:/data
+    ports:
+      - "${REDIS_PORT}:6379"
+    networks:
+      backend:
+        aliases:
+          - ${APP_ID}_app
+
+#   stripe:
+#     image: stripe/stripe-cli:latest
+#     container_name: ${APP_ID}_stripe
+#     environment:
+#     # STRIPE_API_KEY: ${STRIPE_SECRET}
+#     STRIPE_DEVICE_NAME: ${STRIPE_DEVICE_NAME}
+#     command: listen --forward-to http://localhost:8000
+#     networks:
+#     backend:
+#       aliases:
+#         - ${APP_ID}_app
+
+networks:
+  backend:
+    name: ${APP_ID}-network

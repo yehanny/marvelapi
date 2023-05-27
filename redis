@@ -1,0 +1,3 @@
+#!/bin/bash
+
+docker exec -it marveltest_redis sh -c "redis-cli -p 6379 -a redis2021"
